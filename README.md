@@ -89,7 +89,8 @@ infra-gitlab-config/
 ---
 ## 3. Cấu hình tổ chức: config/organizations.yml
 File này mô tả toàn bộ phòng ban, root group, sub-group, admin, members, projects.
-Lưu ý: Thay toàn bộ *_example.com bằng email thật, username thật theo chuẩn nội bộ.
+
+  Lưu ý: Thay toàn bộ *_example.com bằng email thật, username thật theo chuẩn nội bộ.
 ```bash
 departments:
   cloudops:
