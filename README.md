@@ -1,324 +1,84 @@
-# GitLab Infrastructure as Code cho Tổ Chức Phòng Ban
+# GitLab IaC Architecture – Multi-Repo, Per-Department Input
 
-Tài liệu này hướng dẫn triển khai một luồng **tự động hoá** trên GitLab để:
+Tài liệu này mô tả kiến trúc mới và hướng dẫn triển khai đầy đủ cho hệ thống:
 
-- Tạo **groups / subgroups** theo từng phòng ban
-- Tạo **projects**
-- Tạo hoặc đồng bộ **users**
-- **Phân quyền** (Team Lead, Admin sub-group, Developer)
-- Tất cả được điều khiển qua **file YAML + Merge Request**
+- Mỗi phòng ban có **repo riêng** để tự khai báo user/project.
+- Một **repo hạ tầng trung tâm** gom tất cả cấu hình, validate nâng cao và apply lên GitLab bằng API.
 
 ---
 
-## 1. Mục tiêu & Kiến trúc tổng quan
+## 1. Mục tiêu
 
-### 1.1. Mục tiêu
-
-- Chuẩn hoá cấu trúc GitLab theo phòng ban:
-  - `cloudops`, `devops`, `appops`, `developer`, `tester`, `db`
-- Mỗi phòng có:
-  - **Root group** (ví dụ: `devops`)
-  - Các **sub-groups** (ví dụ: `devops/ci-cd-projects`)
-  - Bên trong mỗi sub-group có thể tạo **nhiều projects** và sub-group con (optional)
-- Phân quyền:
-  - Team Lead: **Owner** trên root group (quyền cao nhất trong group đó)
-  - Admin sub-group: **Maintainer** (review, merge code, quản lý project trong subgroup)
-  - Thành viên còn lại: **Developer** (push code, tạo branch, mở MR, không chỉnh setting)
-
-### 1.2. Kiến trúc giải pháp
-
-Sử dụng 1 repo trung tâm để quản lý cấu trúc GitLab bằng code:
-
-- Repo: `gitlab-admin/infra-gitlab-config` (tên gợi ý, có thể đổi)
-- Bên trong repo:
-  - `config/organizations.yml` – Định nghĩa phòng ban, groups, projects, users, roles
-  - `scripts/manage_gitlab.py` – Script Python đọc YAML, gọi GitLab API để:
-    - Tạo group/subgroup/project
-    - Tạo user (nếu chưa tồn tại)
-    - Gán role cho user
-  - `.gitlab-ci.yml` – Pipeline GitLab CI:
-    - Validate cấu hình khi tạo Merge Request
-    - Áp dụng thay đổi sau khi MR được merge
-
-**Luồng hoạt động:**
-
-1. Người dùng / PM cập nhật `config/organizations.yml` (thêm user, project, subgroup, …).
-2. Tạo **Merge Request** vào branch `main`.
-3. CI job `validate-config` kiểm tra file YAML.
-4. Team Lead/Admin review MR:
-   - Nếu OK → merge vào `main`.
-5. CI job `apply-config` chạy:
-   - Script `manage_gitlab.py` gọi GitLab API và cập nhật GitLab theo config.
+- Tạo và quản lý:
+  - **Groups / Subgroups** theo từng phòng ban.
+  - **Projects** trong từng subgroup.
+  - **Users** và **quyền** (Owner, Maintainer, Developer).
+- Cho phép **từng phòng tự chủ** khai báo thông tin của mình:
+  - Không nhìn thấy thông tin các phòng khác.
+- Tự động hoá:
+  - Sync cấu hình từ repo phòng → repo hạ tầng.
+  - Validate nâng cao (trùng username, email, conflict với GitLab).
+  - Gọi GitLab API apply cấu hình.
 
 ---
 
-## 2. Chuẩn bị môi trường
+## 2. Kiến trúc tổng quan
 
-### 2.1. Yêu cầu GitLab
+### 2.1. Các repository
 
-- GitLab **Self-Hosted** hoặc GitLab.com đều được.
-- Cần một **Admin user** trên GitLab để:
-  - Tạo user mới qua API
-  - Quản lý group, project
+1. **Repo hạ tầng trung tâm** (chỉ TL/DevOps xem được):
 
-### 2.2. Tạo Personal Access Token (Admin)
+   - Ví dụ:  
+     `gitlab-admin/infra-gitlab-config`
 
-1. Đăng nhập bằng tài khoản **Admin**.
-2. Vào: **User Settings → Access Tokens** (hoặc tương đương).
-3. Tạo token với quyền:
-   - `api`
-   - (tuỳ GitLab version, có thể cần thêm `read_api`, `write_repository` nếu yêu cầu)
-4. Lưu lại token, dùng cho CI.
+   - Chứa:
+     - `config/*.yml`: cấu hình tổng hợp từ tất cả phòng.
+     - `scripts/manage_gitlab.py`: script gọi GitLab API.
+     - `.gitlab-ci.yml`: pipeline sync → validate → apply.
 
-### 2.3. Tạo repo quản lý hạ tầng GitLab
+2. **Mỗi phòng một repo request riêng** (user phòng đó xem/sửa được):
 
-Tạo một project mới, ví dụ:
+   - Ví dụ:
+     - `cloudops/gitlab-requests`
+     - `devops/gitlab-requests`
+     - `appops/gitlab-requests`
+     - `developer/gitlab-requests`
+     - `tester/gitlab-requests`
+     - `db/gitlab-requests`
 
-- `gitlab-admin/infra-gitlab-config`
+   - Mỗi repo chứa:
+     - `config/<dept>.yml` – file YAML để phòng nhập thông tin.
+     - `.gitlab-ci.yml` – chỉ validate YAML ở MR.
+     - `README.md` – hướng dẫn cho user phòng đó.
 
-Clone repo về và tạo cấu trúc:
+### 2.2. Data flow
+
+1. User phòng X sửa `config/<dept>.yml` trong repo `X/gitlab-requests`.
+2. User tạo MR → CI của repo phòng X validate YAML → TL phòng X merge vào `main`.
+3. Repo `infra-gitlab-config` (branch `main`) chạy pipeline:
+   - Job `sync-configs`:
+     - Dùng `curl` + token để tải các file YAML từ từng repo phòng (branch `main`) về `infra-gitlab-config/config/`.
+   - Job `validate-config`:
+     - Gọi `scripts/manage_gitlab.py` (hàm `load_all_departments + run_advanced_validation`) để validate:
+       - Trùng username/email trong YAML.
+       - Conflict với user/email đang có trong GitLab.
+       - (Tuỳ chọn) Kiểm tra LDAP user đã tồn tại trên GitLab.
+   - Job `apply-config`:
+     - Gọi GitLab API để tạo/ cập nhật group, subgroup, project, members, role.
+
+---
+
+## 3. Cấu trúc chi tiết các repo
+
+### 3.1. Repo phòng ban – ví dụ CloudOps
+
+**Tên repo gợi ý**: `cloudops/gitlab-requests`
+
+Cấu trúc:
 
 ```bash
-infra-gitlab-config/
+cloudops-gitlab-requests/
 ├─ config/
-│  └─ organizations.yml
-├─ scripts/
-│  └─ manage_gitlab.py
+│  └─ cloudops.yml
 └─ .gitlab-ci.yml
-```
----
-## 3. Cấu hình tổ chức: config/organizations.yml
-File này mô tả toàn bộ phòng ban, root group, sub-group, admin, members, projects.
-
-  Lưu ý: Thay toàn bộ *_example.com bằng email thật, username thật theo chuẩn nội bộ.
-```bash
-departments:
-  cloudops:
-    root_group: "cloudops"
-    team_lead:
-      username: "cloudops_tl"
-      name: "CloudOps Team Lead"
-      email: "cloudops_tl@example.com"
-    subgroups:
-      migrations:
-        admin:
-          username: "cloudops_mig_admin"
-          name: "CloudOps Migrations Admin"
-          email: "cloudops_mig_admin@example.com"
-        members:
-          - username: "cloudops_user1"
-            name: "CloudOps User 1"
-            email: "cloudops_user1@example.com"
-            role: developer
-        projects:
-          - name: "mig-project-1"
-          - name: "mig-project-2"
-
-      operations:
-        admin:
-          username: "cloudops_ops_admin"
-          name: "CloudOps Ops Admin"
-          email: "cloudops_ops_admin@example.com"
-        members:
-          - username: "cloudops_user2"
-            name: "CloudOps User 2"
-            email: "cloudops_user2@example.com"
-            role: developer
-        projects:
-          - name: "ops-monitoring"
-
-      automations:
-        admin:
-          username: "cloudops_auto_admin"
-          name: "CloudOps Auto Admin"
-          email: "cloudops_auto_admin@example.com"
-        members: []
-        projects: []
-
-      learning-testing:
-        admin:
-          username: "cloudops_learn_admin"
-          name: "CloudOps Learn Admin"
-          email: "cloudops_learn_admin@example.com"
-        members: []
-        projects: []
-
-  devops:
-    root_group: "devops"
-    team_lead:
-      username: "devops_tl"
-      name: "DevOps Team Lead"
-      email: "devops_tl@example.com"
-    subgroups:
-      platform-devsecops-tools:
-        admin:
-          username: "devops_platform_admin"
-          name: "DevOps Platform Admin"
-          email: "devops_platform_admin@example.com"
-        members: []
-        projects: []
-
-      operations:
-        admin:
-          username: "devops_ops_admin"
-          name: "DevOps Ops Admin"
-          email: "devops_ops_admin@example.com"
-        members: []
-        projects: []
-
-      ci-cd-projects:
-        admin:
-          username: "devops_ci_admin"
-          name: "DevOps CI Admin"
-          email: "devops_ci_admin@example.com"
-        members:
-          - username: "devops_dev1"
-            name: "DevOps Dev 1"
-            email: "devops_dev1@example.com"
-            role: developer
-        projects:
-          - name: "cicd-template"
-          - name: "project-a"
-          - name: "project-b"
-
-      learning-testing:
-        admin:
-          username: "devops_learn_admin"
-          name: "DevOps Learn Admin"
-          email: "devops_learn_admin@example.com"
-        members: []
-        projects: []
-
-  appops:
-    root_group: "appops"
-    team_lead:
-      username: "appops_tl"
-      name: "AppOps Team Lead"
-      email: "appops_tl@example.com"
-    subgroups:
-      applications-backend:
-        admin:
-          username: "appops_backend_admin"
-          name: "AppOps Backend Admin"
-          email: "appops_backend_admin@example.com"
-        members: []
-        projects: []
-
-      operations:
-        admin:
-          username: "appops_ops_admin"
-          name: "AppOps Ops Admin"
-          email: "appops_ops_admin@example.com"
-        members: []
-        projects: []
-
-      automations:
-        admin:
-          username: "appops_auto_admin"
-          name: "AppOps Auto Admin"
-          email: "appops_auto_admin@example.com"
-        members: []
-        projects: []
-
-      learning-testing:
-        admin:
-          username: "appops_learn_admin"
-          name: "AppOps Learn Admin"
-          email: "appops_learn_admin@example.com"
-        members: []
-        projects: []
-
-  developer:
-    root_group: "developer"
-    team_lead:
-      username: "dev_tl"
-      name: "Developer Team Lead"
-      email: "dev_tl@example.com"
-    subgroups:
-      applications-dev-projects:
-        admin:
-          username: "dev_app_admin"
-          name: "Dev Applications Admin"
-          email: "dev_app_admin@example.com"
-        members: []
-        projects: []
-
-      automations:
-        admin:
-          username: "dev_auto_admin"
-          name: "Dev Auto Admin"
-          email: "dev_auto_admin@example.com"
-        members: []
-        projects: []
-
-      learning-testing:
-        admin:
-          username: "dev_learn_admin"
-          name: "Dev Learn Admin"
-          email: "dev_learn_admin@example.com"
-        members: []
-        projects: []
-
-  tester:
-    root_group: "tester"
-    team_lead:
-      username: "tester_tl"
-      name: "Tester Team Lead"
-      email: "tester_tl@example.com"
-    subgroups:
-      test-applications-projects:
-        admin:
-          username: "tester_app_admin"
-          name: "Tester App Admin"
-          email: "tester_app_admin@example.com"
-        members: []
-        projects: []
-
-      automations:
-        admin:
-          username: "tester_auto_admin"
-          name: "Tester Auto Admin"
-          email: "tester_auto_admin@example.com"
-        members: []
-        projects: []
-
-      learning-testing:
-        admin:
-          username: "tester_learn_admin"
-          name: "Tester Learn Admin"
-          email: "tester_learn_admin@example.com"
-        members: []
-        projects: []
-
-  db:
-    root_group: "db"
-    team_lead:
-      username: "db_tl"
-      name: "DB Team Lead"
-      email: "db_tl@example.com"
-    subgroups:
-      DB-applications-projects:
-        admin:
-          username: "db_app_admin"
-          name: "DB App Admin"
-          email: "db_app_admin@example.com"
-        members: []
-        projects: []
-
-      automations:
-        admin:
-          username: "db_auto_admin"
-          name: "DB Auto Admin"
-          email: "db_auto_admin@example.com"
-        members: []
-        projects: []
-
-      learning-testing:
-        admin:
-          username: "db_learn_admin"
-          name: "DB Learn Admin"
-          email: "db_learn_admin@example.com"
-        members: []
-        projects: []
-
-```
+└─ README.md
