@@ -797,3 +797,34 @@ Trong repo infra-gitlab-config → Settings → CI/CD → Variables:
     - Admin token (scope: api) – dùng trong manage_gitlab.py để tạo user/group/project.
   - GITLAB_READ_TOKEN
     - Token có quyền read_repository trên các repo phòng ban (có thể dùng luôn admin token nếu muốn đơn giản).
+---
+## 4. Quy trình sử dụng
+### 4.1. Đối với user từng phòng
+1. Vào repo phòng (vd cloudops/gitlab-requests).
+2. Sửa config/<dept>.yml:
+  - Thêm/sửa user trong members.
+  - Thêm/sửa project trong projects.
+  - (Nếu được phép) Đổi admin subgroup trong admin.
+3. Tạo Merge Request → CI validate YAML.
+4. Team Lead/phụ trách phòng review → merge vào main.
+
+### 4.2. Đối với DevOps / TL hạ tầng
+1. Đảm bảo repo infra-gitlab-config đã:
+  - Chứa scripts/manage_gitlab.py (bản có validation nâng cao).
+  - .gitlab-ci.yml đã được điền đúng project ID của các repo phòng.
+  - Biến GITLAB_URL, GITLAB_API_TOKEN, GITLAB_READ_TOKEN đã set.
+2. Khi có thay đổi từ phòng ban (merge vào repo phòng):
+  - Chạy pipeline infra-gitlab-config (auto hoặc manual tùy thiết kế).
+3. Theo dõi stage:
+  - sync-configs phải success (tải được YAML).
+  - validate-config phải success (không conflict user/email).
+  - apply-config thành công → GitLab đã được cập nhật.
+---
+## 5. Ghi chú & mở rộng
+  - Có thể tách base-*.yml để giữ cấu trúc cố định (root_group, team_lead, subgroups…) trong repo infra, còn repo phòng chỉ cung cấp bổ sung members và projects.
+  - Có thể bật chế độ LDAP-only:
+    - Script không tạo user mới, chỉ add user đã tồn tại trên GitLab (do login bằng AD).
+  - Có thể mở rộng manage_gitlab.py để:
+    - Tạo protected branches.
+    - Giới hạn người được merge (chỉ Maintainer).
+    - Áp template cho project mới (CI template, default labels, v.v.).
