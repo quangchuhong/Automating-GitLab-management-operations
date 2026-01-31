@@ -688,7 +688,23 @@ if __name__ == "__main__":
       - Admin subgroup: Maintainer.
       - Members: Developer (hoặc role khác theo YAML).
 ### 3.2.2. .gitlab-ci.yml trong repo infra
-Template (cần điền project ID thật):
+Lấy project ID để thay vào template
+Cách đơn giản:
+  - Mở repo phòng ban (vd cloudops/gitlab-requests) trên web GitLab.
+  - Vào Settings → General (hoặc Overview).Sẽ thấy Project ID: 123.
+  - Thay vào .gitlab-ci.yml:
+```bash
+"$GITLAB_URL/api/v4/projects/123/repository/files/config%2Fcloudops.yml/raw?ref=$REQUESTS_BRANCH"
+
+```
+Làm tương tự cho:
+  - DevOps: PROJECT_ID_DEVOPS
+  - AppOps: PROJECT_ID_APPOPS
+  - Developer: PROJECT_ID_DEVELOPER
+  - Tester: PROJECT_ID_TESTER
+  - DB: PROJECT_ID_DB
+
+File .gitlab-ci.yml
 ```bash
 stages:
   - sync
