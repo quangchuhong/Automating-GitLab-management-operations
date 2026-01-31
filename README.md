@@ -138,4 +138,4 @@ departments:
         projects: []
 
 ```
-_Các repo phòng khác (DevOps, AppOps, Developer, Tester, DB) dùng cấu trúc tương tự, chỉ khác tên department & subgroups.
+Các repo phòng khác (DevOps, AppOps, Developer, Tester, DB) dùng cấu trúc tương tự, chỉ khác tên department & subgroups.
