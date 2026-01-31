@@ -688,3 +688,96 @@ if __name__ == "__main__":
       - Admin subgroup: Maintainer.
       - Members: Developer (hoặc role khác theo YAML).
 ### 3.2.2. .gitlab-ci.yml trong repo infra
+Template (cần điền project ID thật):
+```bash
+stages:
+  - sync
+  - validate
+  - apply
+
+variables:
+  REQUESTS_BRANCH: "main"
+
+sync-configs:
+  stage: sync
+  image: curlimages/curl:8.5.0
+  script:
+    # CloudOps
+    - echo "Syncing cloudops.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_CLOUDOPS/repository/files/config%2Fcloudops.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/cloudops.yml
+
+    # DevOps
+    - echo "Syncing devops.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_DEVOPS/repository/files/config%2Fdevops.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/devops.yml
+
+    # AppOps
+    - echo "Syncing appops.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_APPOPS/repository/files/config%2Fappops.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/appops.yml
+
+    # Developer
+    - echo "Syncing developer.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_DEVELOPER/repository/files/config%2Fdeveloper.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/developer.yml
+
+    # Tester
+    - echo "Syncing tester.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_TESTER/repository/files/config%2Ftester.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/tester.yml
+
+    # DB
+    - echo "Syncing db.yml..."
+    - >
+      curl --header "PRIVATE-TOKEN: $GITLAB_READ_TOKEN" -f
+      "$GITLAB_URL/api/v4/projects/PROJECT_ID_DB/repository/files/config%2Fdb.yml/raw?ref=$REQUESTS_BRANCH"
+      -o config/db.yml
+
+  only:
+    - main
+
+validate-config:
+  stage: validate
+  image: python:3.11
+  script:
+    - pip install pyyaml requests
+    - python - << 'EOF'
+      from scripts.manage_gitlab import load_all_departments, run_advanced_validation
+      config = load_all_departments()
+      run_advanced_validation(config)
+      EOF
+  needs: ["sync-configs"]
+  only:
+    - main
+
+apply-config:
+  stage: apply
+  image: python:3.11
+  script:
+    - pip install pyyaml requests
+    - python scripts/manage_gitlab.py
+  needs: ["validate-config"]
+  only:
+    - main
+  when: on_success
+
+```
+### 3.2.3. Biến CI cần thiết
+Trong repo infra-gitlab-config → Settings → CI/CD → Variables:
+  - GITLAB_URL
+    - Ví dụ: https://gitlab.example.com
+  - GITLAB_API_TOKEN
+    - Admin token (scope: api) – dùng trong manage_gitlab.py để tạo user/group/project.
+  - GITLAB_READ_TOKEN
+    - Token có quyền read_repository trên các repo phòng ban (có thể dùng luôn admin token nếu muốn đơn giản).
