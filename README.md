@@ -138,4 +138,26 @@ departments:
         projects: []
 
 ```
-Các repo phòng khác (DevOps, AppOps, Developer, Tester, DB) dùng cấu trúc tương tự, chỉ khác tên department & subgroups.
+  - Các repo phòng khác (DevOps, AppOps, Developer, Tester, DB) dùng cấu trúc tương tự, chỉ khác tên department & subgroups.
+
+### 3.1.2. .gitlab-ci.yml trong repo phòng
+Dùng chung cho tất cả phòng, chỉ đổi tên file YAML:
+```bash
+stages:
+  - validate
+
+validate-config:
+  stage: validate
+  image: python:3.11
+  script:
+    - pip install pyyaml
+    - python -c "import yaml; yaml.safe_load(open('config/cloudops.yml'))"
+  only:
+    - merge_requests
+
+```
+  - Với DevOps: config/devops.yml
+  - AppOps: config/appops.yml
+  - Developer: config/developer.yml
+  - Tester: config/tester.yml
+  - DB: config/db.yml
