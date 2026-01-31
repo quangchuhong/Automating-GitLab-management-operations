@@ -671,3 +671,20 @@ if __name__ == "__main__":
     main()
 
 ```
+  - Validation nâng cao (run_advanced_validation(config)):
+    - Thu thập tất cả user từ YAML.
+    - Kiểm tra:
+      - Trùng username / email trong YAML.
+      - Conflict với user/email hiện có trên GitLab.
+      - (Tùy chọn) LDAP user chưa tồn tại trên GitLab.
+    - Nếu lỗi → in danh sách lỗi + sys.exit(1) → CI fail, không apply.
+  - Apply (process_department):
+    - Đảm bảo root group tồn tại (ensure_root_group).
+    - Đảm bảo subgroups tồn tại (ensure_subgroup).
+    - Tạo projects nếu chưa có (ensure_project).
+    - Tạo user (nếu cho phép local user) hoặc chỉ find user (nếu dùng LDAP).
+    - Gán quyền:
+      - Team Lead: Owner trên root group.
+      - Admin subgroup: Maintainer.
+      - Members: Developer (hoặc role khác theo YAML).
+### 3.2.2. .gitlab-ci.yml trong repo infra
