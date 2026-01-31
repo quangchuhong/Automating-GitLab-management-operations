@@ -82,3 +82,59 @@ cloudops-gitlab-requests/
 │  └─ cloudops.yml
 └─ .gitlab-ci.yml
 └─ README.md
+```
+### 3.1.1. config/cloudops.yml (mẫu)
+```bash
+departments:
+  cloudops:
+    subgroups:
+      migrations:
+        admin:
+          username: "cloudops_mig_admin"
+          name: "CloudOps Migrations Admin"
+          email: "cloudops_mig_admin@example.com"
+
+        members:
+          - username: "cloudops_user1"
+            name: "CloudOps User 1"
+            email: "cloudops_user1@example.com"
+            role: developer
+
+        projects:
+          - name: "mig-project-1"
+          - name: "mig-project-2"
+
+      operations:
+        admin:
+          username: "cloudops_ops_admin"
+          name: "CloudOps Ops Admin"
+          email: "cloudops_ops_admin@example.com"
+
+        members:
+          - username: "cloudops_user2"
+            name: "CloudOps User 2"
+            email: "cloudops_user2@example.com"
+            role: developer
+
+        projects:
+          - name: "ops-monitoring"
+
+      automations:
+        admin:
+          username: "cloudops_auto_admin"
+          name: "CloudOps Auto Admin"
+          email: "cloudops_auto_admin@example.com"
+
+        members: []
+        projects: []
+
+      learning-testing:
+        admin:
+          username: "cloudops_learn_admin"
+          name: "CloudOps Learn Admin"
+          email: "cloudops_learn_admin@example.com"
+
+        members: []
+        projects: []
+
+```
